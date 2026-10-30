@@ -12,4 +12,13 @@ public class MiniBankDbContext : DbContext
     }
     
     public DbSet<Conta> Contas { get; set; }
+    
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<Conta>()
+            .HasIndex(c => c.Numero)
+            .IsUnique();
+    }
 }

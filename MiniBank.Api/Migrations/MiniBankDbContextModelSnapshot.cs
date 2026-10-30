@@ -37,6 +37,9 @@ namespace MiniBank.Api.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Numero")
+                        .IsUnique();
+
                     b.ToTable("Contas");
                 });
 #pragma warning restore 612, 618

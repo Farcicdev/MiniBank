@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using MiniBank.Api.Data;
+using MiniBank.Api.Service;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -8,6 +9,8 @@ builder.Services.AddDbContext<MiniBankDbContext>(options =>
         builder.Configuration.GetConnectionString("DefaultConnection")
     )
 );
+
+builder.Services.AddScoped<ContaService>();
 
 // Add services to the container.
 
