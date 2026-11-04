@@ -28,19 +28,135 @@ namespace MiniBank.Api.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("EhCompensacao")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Numero")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<decimal>("Saldo")
-                        .HasColumnType("numeric");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
 
                     b.HasKey("Id");
 
                     b.HasIndex("Numero")
                         .IsUnique();
 
-                    b.ToTable("Contas");
+                    b.ToTable("Contas", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Contas_SaldoETipo", "(\"EhCompensacao\" AND \"Id\" = '00000000-0000-0000-0000-000000000001'\n    AND \"Numero\" = '__COMPENSACAO_DEPOSITOS__' AND \"Saldo\" <= 0)\nOR (NOT \"EhCompensacao\" AND \"Id\" <> '00000000-0000-0000-0000-000000000001'\n    AND \"Saldo\" >= 0)");
+                        });
+                });
+
+            modelBuilder.Entity("MiniBank.Api.Models.Lancamento", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ContaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Natureza")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("OperacaoId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Valor")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ContaId");
+
+                    b.HasIndex("OperacaoId", "Natureza")
+                        .IsUnique();
+
+                    b.ToTable("Lancamentos", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Lancamentos_Natureza", "\"Natureza\" IN (1, 2)");
+
+                            t.HasCheckConstraint("CK_Lancamentos_Valor", "\"Valor\" > 0");
+                        });
+                });
+
+            modelBuilder.Entity("MiniBank.Api.Models.OperacaoFinanceira", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ContaCreditoId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ContaDebitoId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("DataUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Tipo")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Valor")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ContaCreditoId");
+
+                    b.HasIndex("ContaDebitoId");
+
+                    b.ToTable("OperacoesFinanceiras", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Operacoes_Compensacao", "\"ContaCreditoId\" <> '00000000-0000-0000-0000-000000000001'\nAND ((\"Tipo\" IN (1, 3) AND \"ContaDebitoId\" = '00000000-0000-0000-0000-000000000001')\n    OR (\"Tipo\" = 2 AND \"ContaDebitoId\" <> '00000000-0000-0000-0000-000000000001'))");
+
+                            t.HasCheckConstraint("CK_Operacoes_Contas", "\"ContaDebitoId\" <> \"ContaCreditoId\"");
+
+                            t.HasCheckConstraint("CK_Operacoes_Tipo", "\"Tipo\" IN (1, 2, 3)");
+
+                            t.HasCheckConstraint("CK_Operacoes_Valor", "\"Valor\" > 0");
+                        });
+                });
+
+            modelBuilder.Entity("MiniBank.Api.Models.Lancamento", b =>
+                {
+                    b.HasOne("MiniBank.Api.Models.Conta", null)
+                        .WithMany()
+                        .HasForeignKey("ContaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MiniBank.Api.Models.OperacaoFinanceira", null)
+                        .WithMany("Lancamentos")
+                        .HasForeignKey("OperacaoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("MiniBank.Api.Models.OperacaoFinanceira", b =>
+                {
+                    b.HasOne("MiniBank.Api.Models.Conta", null)
+                        .WithMany()
+                        .HasForeignKey("ContaCreditoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MiniBank.Api.Models.Conta", null)
+                        .WithMany()
+                        .HasForeignKey("ContaDebitoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("MiniBank.Api.Models.OperacaoFinanceira", b =>
+                {
+                    b.Navigation("Lancamentos");
                 });
 #pragma warning restore 612, 618
         }

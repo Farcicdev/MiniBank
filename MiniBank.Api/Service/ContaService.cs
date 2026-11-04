@@ -29,12 +29,13 @@ public class ContaService
 
     public async Task<List<Conta>> ListarContasAsync(CancellationToken cancellationToken = default)
     {
-        return await _context.Contas.AsNoTracking().ToListAsync(cancellationToken);
+        return await _context.Contas.AsNoTracking().Where(conta => !conta.EhCompensacao)
+            .ToListAsync(cancellationToken);
     }
 
     public async Task<Conta?> ObterContaPorIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         return await _context.Contas.AsNoTracking()
-            .SingleOrDefaultAsync(conta => conta.Id == id, cancellationToken);
+            .SingleOrDefaultAsync(conta => conta.Id == id && !conta.EhCompensacao, cancellationToken);
     }
 }
