@@ -11,6 +11,7 @@ builder.Services.AddDbContext<MiniBankDbContext>(options =>
 );
 
 builder.Services.AddScoped<ContaService>();
+builder.Services.AddScoped<OperacaoFinanceiraService>();
 
 // Add services to the container.
 
