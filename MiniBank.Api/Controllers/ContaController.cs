@@ -22,4 +22,9 @@ public class ContaController : ControllerBase
 
         return Created($"api/contas/{novaConta.Id}", novaConta);
     }
+
+    public void listarContas(Conta conta)
+    {
+        
+    }
 }

@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using MiniBank.Api.Data;
 using MiniBank.Api.Models;
 
@@ -24,5 +25,10 @@ public class ContaService
         await _context.SaveChangesAsync();
 
         return novaConta;
-    } 
+    }
+
+    public async Task<List<Conta>> ListarConta()
+    {
+        return await _context.Contas.ToListAsync();
+    }
 }
