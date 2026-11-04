@@ -13,22 +13,28 @@ public class ContaService
         _context = context;
     }
 
-    public async Task<Conta> CriarContaAsync(Conta conta)
+    public async Task<Conta> CriarContaAsync(string numero, CancellationToken cancellationToken = default)
     {
-        var novaConta = new Conta()
+        var novaConta = new Conta
         {
             Id = Guid.NewGuid(),
-            Numero = conta.Numero
+            Numero = numero
         };
-        _context.Add(novaConta);
+        _context.Contas.Add(novaConta);
 
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(cancellationToken);
 
         return novaConta;
     }
 
-    public async Task<List<Conta>> ListarConta()
+    public async Task<List<Conta>> ListarContasAsync(CancellationToken cancellationToken = default)
     {
-        return await _context.Contas.ToListAsync();
+        return await _context.Contas.AsNoTracking().ToListAsync(cancellationToken);
+    }
+
+    public async Task<Conta?> ObterContaPorIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return await _context.Contas.AsNoTracking()
+            .SingleOrDefaultAsync(conta => conta.Id == id, cancellationToken);
     }
 }
