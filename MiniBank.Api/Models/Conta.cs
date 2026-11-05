@@ -1,3 +1,5 @@
+using MiniBank.Api.Rules;
+
 namespace MiniBank.Api.Models;
 
 public class Conta

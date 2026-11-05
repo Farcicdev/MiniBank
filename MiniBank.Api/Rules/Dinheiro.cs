@@ -1,4 +1,6 @@
-namespace MiniBank.Api.Models;
+using MiniBank.Api.Models;
+
+namespace MiniBank.Api.Rules;
 
 public static class Dinheiro
 {

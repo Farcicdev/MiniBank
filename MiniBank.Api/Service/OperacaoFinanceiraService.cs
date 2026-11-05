@@ -2,6 +2,7 @@ using System.Data;
 using Microsoft.EntityFrameworkCore;
 using MiniBank.Api.Data;
 using MiniBank.Api.Models;
+using MiniBank.Api.Rules;
 
 namespace MiniBank.Api.Service;
 

@@ -19,8 +19,7 @@ public class ContaController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<ContaResponse>> CriarConta(
-        CriarContaRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<ContaResponse>> CriarConta(CriarContaRequest request, CancellationToken cancellationToken)
     {
         try
         {
