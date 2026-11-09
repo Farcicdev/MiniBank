@@ -50,6 +50,33 @@ namespace MiniBank.Api.Migrations
                         });
                 });
 
+            modelBuilder.Entity("MiniBank.Api.Models.IdemPotenciaRegistro", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Chave")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("OperacaoFinanceiraId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Chave")
+                        .IsUnique();
+
+                    b.HasIndex("OperacaoFinanceiraId");
+
+                    b.ToTable("IdemPotencias");
+                });
+
             modelBuilder.Entity("MiniBank.Api.Models.Lancamento", b =>
                 {
                     b.Property<Guid>("Id")
@@ -122,6 +149,15 @@ namespace MiniBank.Api.Migrations
 
                             t.HasCheckConstraint("CK_Operacoes_Valor", "\"Valor\" > 0");
                         });
+                });
+
+            modelBuilder.Entity("MiniBank.Api.Models.IdemPotenciaRegistro", b =>
+                {
+                    b.HasOne("MiniBank.Api.Models.OperacaoFinanceira", null)
+                        .WithMany()
+                        .HasForeignKey("OperacaoFinanceiraId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("MiniBank.Api.Models.Lancamento", b =>

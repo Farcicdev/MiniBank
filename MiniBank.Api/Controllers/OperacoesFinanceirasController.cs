@@ -19,9 +19,15 @@ public class OperacoesFinanceirasController(
 
     [HttpPost("api/transferencias")]
     public Task<ActionResult<OperacaoFinanceiraResponse>> Transferir(
-        TransferenciaRequest request, CancellationToken cancellationToken) =>
+        TransferenciaRequest request,
+        [FromHeader(Name = "Idempotencia-key")] string chave,
+        CancellationToken cancellationToken) =>
         ExecutarAsync(() => service.TransferirAsync(
-            request.ContaOrigemId, request.ContaDestinoId, request.Valor, cancellationToken));
+            request.ContaOrigemId, 
+            request.ContaDestinoId,
+            request.Valor, 
+            chave,
+            cancellationToken));
 
     private async Task<ActionResult<OperacaoFinanceiraResponse>> ExecutarAsync(
         Func<Task<OperacaoFinanceira>> executar)

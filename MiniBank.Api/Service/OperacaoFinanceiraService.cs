@@ -17,7 +17,7 @@ public class OperacaoFinanceiraService(MiniBankDbContext context)
     }
 
     public Task<OperacaoFinanceira> TransferirAsync(
-        Guid contaOrigemId, Guid contaDestinoId, decimal valor, CancellationToken cancellationToken = default)
+        Guid contaOrigemId, Guid contaDestinoId, decimal valor, string Chave, CancellationToken cancellationToken = default)
     {
         ValidarContaPublica(contaOrigemId);
         ValidarContaPublica(contaDestinoId);
@@ -69,6 +69,16 @@ public class OperacaoFinanceiraService(MiniBankDbContext context)
         await transacao.CommitAsync(cancellationToken);
         return operacao;
         // Sem commit, DisposeAsync desfaz a transação, inclusive em cancelamento/erro.
+    }
+    
+    //idempotencia
+    private async Task<IdemPotenciaRegistro?> BuscarIdempotenciaAsync(string chave, CancellationToken cancellationToken)
+    {
+        return await context.IdemPotencias
+            .AsNoTracking()
+            .SingleOrDefaultAsync(registro =>
+                    registro.Chave == chave,
+                cancellationToken);
     }
 
     private static void ValidarContaPublica(Guid id)

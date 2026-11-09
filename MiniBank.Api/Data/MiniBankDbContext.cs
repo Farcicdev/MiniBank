@@ -15,6 +15,9 @@ public class MiniBankDbContext : DbContext
     public DbSet<OperacaoFinanceira> OperacoesFinanceiras { get; set; }
     public DbSet<Lancamento> Lancamentos { get; set; }
     
+    //idempotencia
+    public DbSet<IdemPotenciaRegistro> IdemPotencias { get; set; }
+    
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -69,6 +72,20 @@ public class MiniBankDbContext : DbContext
                 tabela.HasCheckConstraint("CK_Lancamentos_Valor", "\"Valor\" > 0");
                 tabela.HasCheckConstraint("CK_Lancamentos_Natureza", "\"Natureza\" IN (1, 2)");
             });
+        });
+        
+        //idempotencia
+        modelBuilder.Entity<IdemPotenciaRegistro>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => x.Chave)
+                .IsUnique();
+
+            entity.HasOne<OperacaoFinanceira>()
+                .WithMany()
+                .HasForeignKey(x => x.OperacaoFinanceiraId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }
