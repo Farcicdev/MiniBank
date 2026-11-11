@@ -20,7 +20,7 @@ public class OperacoesFinanceirasController(
     [HttpPost("api/transferencias")]
     public Task<ActionResult<OperacaoFinanceiraResponse>> Transferir(
         TransferenciaRequest request,
-        [FromHeader(Name = "Idempotencia-key")] string chave,
+        [FromHeader(Name = "Idempotency-Key")] string? chave,
         CancellationToken cancellationToken) =>
         ExecutarAsync(() => service.TransferirAsync(
             request.ContaOrigemId, 
