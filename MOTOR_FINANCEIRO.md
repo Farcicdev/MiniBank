@@ -1,7 +1,7 @@
 # Motor financeiro — primeira versão
 
 Somente dinheiro fictício. A estrutura continua Controller → Service → DbContext.
-Não há autenticação nem idempotência nesta versão.
+Há idempotência nas transferências; depósitos continuam sem idempotência. Não há autenticação.
 
 ## Endpoints
 
@@ -20,6 +20,7 @@ Transferência entre contas públicas existentes:
 
 ```http
 POST /api/transferencias
+Idempotency-Key: transferencia-exemplo-001
 Content-Type: application/json
 
 {
@@ -52,19 +53,23 @@ de operação. Erros internos são registrados no servidor, sem detalhes na resp
 ```text
 POST /api/transferencias
   → Controller recebe o record e chama o serviço
-  → Serviço valida valor e identificadores
+  → Serviço valida chave (obrigatória, até 128 caracteres), valor e identificadores
+  → Gera SHA-256 dos dados com cultura invariável
   → BEGIN READ COMMITTED
+  → Bloqueio transacional pela chave (pg_advisory_xact_lock)
+  → Consulta a chave: hash igual retorna operação anterior; diferente retorna 409
   → SELECT das duas contas ORDER BY Id FOR UPDATE
   → Verifica existência e saldo com os bloqueios adquiridos
   → Domínio cria operação + débito + crédito e aplica os lançamentos aos saldos
-  → SaveChangesAsync persiste saldos, operação e lançamentos
+  → SaveChangesAsync persiste saldos, operação, lançamentos e registro de idempotência
   → COMMIT verifica constraints diferidas do ledger
   → Controller retorna 200 com o record de resposta
 
 Erro antes do commit → descarte da transação → rollback de todas as alterações
 ```
 
-O depósito segue o mesmo fluxo, debitando a compensação e creditando o cliente.
+O depósito segue o fluxo financeiro sem chave, hash ou bloqueio de idempotência,
+debitando a compensação e creditando o cliente.
 Todas as operações bloqueiam as contas na ordem de UUID definida pelo PostgreSQL.
 Isso inclui a compensação: nenhuma operação usa uma ordem especial origem/destino.
 Os bloqueios duram até o fim da transação. Uma transferência concorrente espera e
@@ -133,12 +138,12 @@ substitui as migrations, pois não instala os triggers e a conta de compensaçã
 
 ## Limitações e próxima etapa manual
 
-- Não foram implementados nem executados testes automatizados. Build não comprova
+- Não foi criada uma suíte de testes nem executada validação de integração. Build não comprova
   execução dos triggers, rollback, migração de dados ou comportamento concorrente
   em PostgreSQL; esses cenários ainda precisam de validação manual em banco de desenvolvimento.
-- Não há idempotência. Repetir um POST pode repetir a movimentação. Uma perda de
-  conexão/resposta durante o commit pode deixar o resultado desconhecido ao cliente;
-  não repetir automaticamente. Não há retry automático de transações.
+- Transferências exigem reutilizar a mesma chave e os mesmos dados quando a resposta
+  se perde. Uma chave nova representa outra transferência. Depósitos ainda podem
+  duplicar se repetidos. Não há retry automático de transações.
 - A compensação única serializa depósitos. A conferência de saldo soma o histórico
   da conta no commit; existem índices, mas o custo cresce com o volume de lançamentos.
 - A ordem de locks evita ciclos entre estes fluxos. SQL externo, futuras rotinas
@@ -155,3 +160,105 @@ opostos, saldo agregado zero e rejeição de escritas que desequilibrem o ledger
 
 Referências: [bloqueios no PostgreSQL](https://www.postgresql.org/docs/current/explicit-locking.html)
 e [constraint triggers](https://www.postgresql.org/docs/16/sql-createtrigger.html).
+
+
+## Idempotência das transferências
+
+A chave é global, sensível a maiúsculas e não é normalizada pelo serviço. Use um
+UUID por intenção de transferência e preserve-o nas repetições. Ausência, vazio,
+somente espaços ou mais de 128 caracteres retornam 400. O limite é validado no
+serviço, sem alterar a coluna `text` nem as migrations aplicadas.
+
+`IdempotenciaHash.Gerar` preserva a versão `transferencia:v1`, UUIDs no formato `D`
+e valor `F2` com cultura invariável. `10`, `10.0` e `10.00` produzem o mesmo hash.
+O serviço valida o dinheiro antes do hash para não aceitar arredondamento de
+frações de centavo. A chave identifica a intenção; o hash identifica os dados.
+
+A ordem é: **bloqueio da chave → contas em ordem de UUID → commit**.
+`pg_advisory_xact_lock(hashtextextended(chave, 0))` funciona entre conexões e
+instâncias da API no mesmo banco, mesmo antes de existir uma linha para a chave.
+Ele é liberado ao encerrar a transação. Uma colisão do hash de 64 bits do bloqueio
+apenas faz chaves distintas esperarem; a consulta continua comparando a chave
+completa. Esse hash de bloqueio não substitui o SHA-256 do conteúdo.
+
+O SELECT da chave é um comando separado, após adquirir o bloqueio. Em
+`READ COMMITTED`, ele enxerga o commit de quem acabou de liberar o bloqueio.
+Se a primeira tentativa desfez a transação, não há registro e a próxima pode
+executar. Se confirmou, a próxima retorna a operação original com os lançamentos,
+sem verificar novamente o saldo. Hash diferente retorna 409 antes de alterar contas.
+Os lançamentos da resposta são ordenados por natureza, mantendo débito antes de crédito.
+
+Todos os caminhos da API adquirem no máximo um bloqueio de chave e seguem a mesma
+ordem de contas; nenhum adquire uma chave depois de bloquear contas. Isso evita
+ciclos de espera entre esses fluxos. SQL externo que ignore esse protocolo pode
+introduzir deadlocks. O índice UNIQUE continua obrigatório como proteção adicional.
+
+O tratamento de `23505` é restrito a `IX_IdemPotencias_Chave`. Antes da consulta
+de recuperação, o escopo de `ExecutarAsync` já descartou a transação inteira e
+seus efeitos; o ChangeTracker é limpo. A leitura ocorre fora dessa transação e
+compara o hash do resultado confirmado. Não há nova tentativa de movimentar saldo.
+Outras violações de unicidade não são confundidas com repetição de transferência.
+Se o registro vencedor não existir (por exemplo, exclusão externa), o erro original
+é preservado; não se inventa um sucesso.
+
+Até a última verificação antes do commit, o cancelamento pode desfazer a tentativa.
+Iniciado o commit da transferência, usa-se `CancellationToken.None` para não
+interrompê-lo por desconexão HTTP. Isso não impede falhas de rede com o banco ou
+timeouts: o resultado pode ficar desconhecido ao cliente. Repita a mesma chave e
+os mesmos dados para recuperar um eventual commit. Uma operação já confirmada
+não é desfeita pelo cancelamento da resposta. Depósitos mantêm sua semântica anterior.
+
+Somente sucessos são armazenados; recusas como saldo insuficiente não reservam a
+chave. Não há expiração, escopo por usuário ou proteção contra exclusão administrativa
+dos registros. A garantia depende de preservá-los e do uso deste protocolo por
+todos os escritores. Não há nova migration nesta alteração.
+
+### Validação manual
+
+Veja `MiniBank.Api/MiniBank.Api.http` para criação de contas, depósito, primeira
+transferência, repetição e conflito. Substitua os IDs pelas contas criadas e garanta
+saldo suficiente. As duas primeiras transferências devem retornar 200 com o mesmo
+ID, data e lançamentos; a terceira retorna 409. Confira os saldos antes e depois.
+Teste também header ausente, vazio e maior que 128 caracteres (400).
+
+Para duas requisições simultâneas, use Bash, com IDs reais e uma chave ainda não usada:
+
+```bash
+api=http://localhost:5032
+origem=SUBSTITUA_PELO_UUID_DA_ORIGEM
+destino=SUBSTITUA_PELO_UUID_DO_DESTINO
+chave=$(cat /proc/sys/kernel/random/uuid)
+corpo=$(printf '{"contaOrigemId":"%s","contaDestinoId":"%s","valor":10.00}' "$origem" "$destino")
+for tentativa in 1 2; do
+  curl --silent --show-error --write-out '\nHTTP %{http_code}\n' \
+    -H 'Content-Type: application/json' -H "Idempotency-Key: $chave" \
+    --data "$corpo" "$api/api/transferencias" > "/tmp/minibank-$chave-$tentativa.txt" &
+done
+wait
+cat "/tmp/minibank-$chave-1.txt" "/tmp/minibank-$chave-2.txt"
+```
+
+Espere dois 200, uma única operação e variação de apenas 10,00 em cada saldo.
+Com outra chave nova, repita em paralelo usando valores distintos: espere um 200
+e um 409, sem pressupor qual chega primeiro. Teste também mesmas contas com chaves
+diferentes e transferências em sentidos opostos para verificar os bloqueios de contas.
+Para forçar espera observável, uma sessão SQL de desenvolvimento pode manter aberto
+`BEGIN; SELECT pg_advisory_xact_lock(hashtextextended('chave-do-teste', 0));` enquanto
+as duas chamadas usam essa chave; `ROLLBACK;` libera o bloqueio sem alterar dados.
+
+A concorrência, o fallback UNIQUE e a perda de conexão durante o commit precisam
+ser validados em PostgreSQL real: os exemplos não são evidência de execução.
+A implementação não promete ausência de deadlocks com escritores externos nem
+disponibilidade ilimitada sob contenção.
+
+Referências técnicas: [advisory locks e ordem de bloqueios](https://www.postgresql.org/docs/17/explicit-locking.html),
+[visibilidade em READ COMMITTED](https://www.postgresql.org/docs/17/transaction-iso.html)
+e [transações do EF Core](https://learn.microsoft.com/en-us/ef/core/saving/transactions).
+
+
+Validação executada nesta alteração: `dotnet build` passou sem erros, com aviso
+`NU1900` por indisponibilidade da consulta de vulnerabilidades do NuGet, inclusive
+na tentativa fora do sandbox. Uma verificação temporária fora do repositório usou
+o próprio `IdempotenciaHash.cs`: 16 combinações de `pt-BR`, `en-US`, `de-DE`, `tr-TR`
+e `10m`, `10.0m`, `10.00m`, `10.000m` produziram o mesmo hash; inverter contas ou
+alterar o valor para `10.01m` produziu hash diferente. Nenhum dado foi alterado.
