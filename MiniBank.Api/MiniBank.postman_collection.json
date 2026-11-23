@@ -1,0 +1,692 @@
+{
+  "info": {
+    "name": "MiniBank - Testes no Bruno",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Importe no Bruno como Postman Collection, com conversão de scripts habilitada (Preserve scripts desmarcado). API e PostgreSQL devem estar em execução, com migrations aplicadas. Execute as 17 requisições na ordem, sem paralelismo. A primeira inicia uma nova rodada e os scripts capturam IDs automaticamente. Saldo final: origem 74.50, destino 25.50. Cada rodada cria duas contas persistentes. Repetir apenas o depósito altera o saldo. baseUrl pode ser ajustada nas variáveis da coleção. Não há autenticação nesta API."
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5032",
+      "type": "string"
+    },
+    {
+      "key": "execucao",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "contaOrigemId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "contaDestinoId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "chaveTransferencia",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "operacaoId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 - Criar conta origem",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/contas",
+        "description": "Inicia uma nova execução com números e chave únicos. Execute toda a coleção em ordem, sem paralelismo.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"numero\": \"bruno-origem-{{execucao}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const execucao = Date.now().toString() + \"-\" + Math.random().toString(36).slice(2, 10);",
+              "pm.collectionVariables.set(\"execucao\", execucao);",
+              "pm.collectionVariables.set(\"chaveTransferencia\", \"bruno-\" + execucao);",
+              "pm.collectionVariables.set(\"contaOrigemId\", \"\");",
+              "pm.collectionVariables.set(\"contaDestinoId\", \"\");",
+              "pm.collectionVariables.set(\"operacaoId\", \"\");"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", function () { pm.response.to.have.status(201); });",
+              "if (pm.response.code === 201) { pm.collectionVariables.set(\"contaOrigemId\", pm.response.json().id); }"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "02 - Criar conta destino",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/contas",
+        "description": "",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"numero\": \"bruno-destino-{{execucao}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", function () { pm.response.to.have.status(201); });",
+              "if (pm.response.code === 201) { pm.collectionVariables.set(\"contaDestinoId\", pm.response.json().id); }"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "03 - Listar contas",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/contas",
+        "description": ""
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "04 - Depositar 100 na origem",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/contas/{{contaOrigemId}}/depositos",
+        "description": "Execute uma vez por rodada. Depósitos não são idempotentes: repetir acrescenta mais 100 ao saldo.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"valor\": 100\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "05 - Transferir 25.50",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{chaveTransferencia}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/transferencias",
+        "description": "",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"contaOrigemId\": \"{{contaOrigemId}}\",\n  \"contaDestinoId\": \"{{contaDestinoId}}\",\n  \"valor\": 25.5\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "if (pm.response.code === 200) { pm.collectionVariables.set(\"operacaoId\", pm.response.json().id); }"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "06 - Repetir transferência sem duplicar",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{chaveTransferencia}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/transferencias",
+        "description": "",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"contaOrigemId\": \"{{contaOrigemId}}\",\n  \"contaDestinoId\": \"{{contaDestinoId}}\",\n  \"valor\": 25.5\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Mesma operação na repetição\", function () { pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get(\"operacaoId\")); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "07 - Mesma chave com outro valor",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{chaveTransferencia}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/transferencias",
+        "description": "",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"contaOrigemId\": \"{{contaOrigemId}}\",\n  \"contaDestinoId\": \"{{contaDestinoId}}\",\n  \"valor\": 30\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 409\", function () { pm.response.to.have.status(409); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "08 - Transferência sem chave",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/transferencias",
+        "description": "",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"contaOrigemId\": \"{{contaOrigemId}}\",\n  \"contaDestinoId\": \"{{contaDestinoId}}\",\n  \"valor\": 25.5\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 400\", function () { pm.response.to.have.status(400); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "09 - Saldo insuficiente",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{chaveTransferencia}}-saldo"
+          }
+        ],
+        "url": "{{baseUrl}}/api/transferencias",
+        "description": "",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"contaOrigemId\": \"{{contaOrigemId}}\",\n  \"contaDestinoId\": \"{{contaDestinoId}}\",\n  \"valor\": 1000\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 409\", function () { pm.response.to.have.status(409); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "10 - Transferência para a mesma conta",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{chaveTransferencia}}-mesma-conta"
+          }
+        ],
+        "url": "{{baseUrl}}/api/transferencias",
+        "description": "",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"contaOrigemId\": \"{{contaOrigemId}}\",\n  \"contaDestinoId\": \"{{contaOrigemId}}\",\n  \"valor\": 1\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 400\", function () { pm.response.to.have.status(400); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "11 - Depósito com valor zero",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/contas/{{contaOrigemId}}/depositos",
+        "description": "",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"valor\": 0\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 400\", function () { pm.response.to.have.status(400); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "12 - Depósito com fração de centavo",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/contas/{{contaOrigemId}}/depositos",
+        "description": "",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"valor\": 1.001\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 400\", function () { pm.response.to.have.status(400); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "13 - Criar conta duplicada",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/contas",
+        "description": "",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"numero\": \"bruno-origem-{{execucao}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 409\", function () { pm.response.to.have.status(409); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "14 - Criar conta sem número",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/contas",
+        "description": "",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"numero\": \"\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 400\", function () { pm.response.to.have.status(400); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "15 - Consultar conta inexistente",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/contas/ffffffff-ffff-ffff-ffff-ffffffffffff",
+        "description": "Pressupõe que este UUID não exista no banco de testes."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "16 - Conferir saldo origem",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/contas/{{contaOrigemId}}",
+        "description": ""
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Saldo esperado: 74.5\", function () { pm.expect(pm.response.json().saldo).to.eql(74.5); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "17 - Conferir saldo destino",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/contas/{{contaDestinoId}}",
+        "description": ""
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Saldo esperado: 25.5\", function () { pm.expect(pm.response.json().saldo).to.eql(25.5); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    }
+  ]
+}
