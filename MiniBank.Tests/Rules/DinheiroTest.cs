@@ -39,4 +39,20 @@ public class DinheiroTest
 
         Dinheiro.Validar(valor);
     }
+    
+    [Fact]
+    public void Validar_ValorNegativo_DeveRetornarErroValidacao()
+    {
+        // Arrange
+        decimal valor = -50m;
+
+        // Act
+        var exception = Assert.Throws<ErroFinanceiroException>(
+            () => Dinheiro.Validar(valor)
+        );
+
+        // Assert
+        Assert.Equal(TipoErroFinanceiro.Validacao, exception.Tipo);
+    }
+
 }
